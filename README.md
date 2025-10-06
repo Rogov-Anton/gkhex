@@ -1,2 +1,2 @@
-# GKHEX (Gaika Komabt HEX)
+# GKHEX (Gaika Kombat HEX)
 -- Sponsored by Gaika Kombat.
