@@ -1,6 +1,6 @@
 program gkhex;
 type
-	hex_file = file of byte;
+	bin_file = file of byte;
 
 
 procedure print_help();
@@ -10,38 +10,34 @@ begin
 end;
 
 
-procedure get_command(var all, command, txt: string);
+procedure get_command(var all, command, args: string);
 var
-	len: byte;
 	i: byte = 1;
+	len: byte;
 begin
 	len := length(all);
-	while (i <= len) and (all[i] = ' ') do
+	command := '';
+	args := '';
+	while (all[i] = ' ') and (i <= len) do
 		i := i + 1;
-	if i = len then
-	begin
-		command := '';
-		txt := '';
+	if i > len then
 		exit;
-	end;
-
-	while (i <= len) and (all[i] <> ' ') do
+	while (all[i] <> ' ') and (i <= len) do
 	begin
 		command := command + all[i];
 		i := i + 1;
 	end;
-	if i = len then
-	begin
-		txt := '';
+	if i > len then
 		exit;
-	end;
-
-	while (i <= len) do
-	begin
+	while (all[i] = ' ') and (i <= len) do
 		i := i + 1;
-		txt := txt + all[i]
+	if i > len then
+		exit;
+	while (all[i] <> #10) and (i <= len) do
+	begin
+		args := args + all[i];
+		i := i + 1;
 	end;
-
 end;
 
 
@@ -84,7 +80,7 @@ begin
 end;
 
 
-procedure write_data(var f: hex_file; var txt: string);
+procedure write_data(var f: bin_file; var txt: string);
 var
 	i: byte = 1;
 	first, second: char;
@@ -94,15 +90,16 @@ begin
 		first := txt[i];
 		second := txt[i + 1];
 		i := i + 3;
+		write(f, hex_to_dec(first, second));
 		write(hex_to_dec(first, second), ' ');
-		writeln;
 	end;
+	writeln;
 end;
 
 
-procedure set_file_size(var f: hex_file; var txt: string);
+procedure set_file_size(var f: bin_file; var txt: string);
 var
-	size, i: longword;		{ size of binary file }
+	size, i: longword;              { size of binary file }
 	ok: integer = 0;
 begin
 	val(txt, size, ok);
@@ -111,40 +108,63 @@ begin
 end;
 
 
-procedure print_file(var f: hex_file);
+procedure print_file(var f: bin_file);
 var
+	curr_addr: longword = 0;
+	curr_pos: longword;
 	i: byte = 0;
 	b: byte;
 begin
-	while not eof do
+	curr_pos := filepos(f);
+	seek(f, 0);
+	write(#10 + '  ' + HexStr(curr_addr, 8) + ': ');
+	while not eof(f) do
 	begin
 		read(f, b);
-		writeln(b);
-		i += 1;
+		write(HexStr(b, 2), ' ');
+		i := i + 1;
 		if i > 15 then
 		begin
-			i := 0;
 			writeln;
+			write('  ' + HexStr(curr_addr, 8) + ': ');
+			curr_addr := curr_addr + 16;
+			i := 0;
 		end;
 	end;
+	writeln('-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --');
+	seek(f, curr_pos);
 end;
 
 
-procedure execute_command(var command, txt: string; var f: hex_file);
+procedure change_address(var f: bin_file; txt: string; var curr_addr: longword);
 var
-	index: byte;
+	address: longword;
+	ok: integer;
+begin
+	val(txt, address, ok);
+	seek(f, address * 16);
+	curr_addr := address * 16;
+	writeln(address * 16);
+end;
+
+
+procedure execute_command(var command, txt: string; var f: bin_file;
+						var curr_addr: longword);
 begin
 	case command of
 		's': set_file_size(f, txt);
 		'p': print_file(f);
+		'c': change_address(f, txt, curr_addr);
 		'w': write_data(f, txt);
+		else writeln('Bad command');
 	end;
 end;
 
 
 var
-	curr_file: hex_file;
+	curr_file: bin_file;
 	all, command, txt: string;
+	curr_address: longword = 0;
 begin
 	if ParamCount < 1 then
 	begin
@@ -154,17 +174,21 @@ begin
 	assign(curr_file, ParamStr(1));
 	rewrite(curr_file);
 	writeln;
-
-	writeln('  Welcome to gkhex, simple hex editor. To get help, input `help`');
-	write(#10 + '  -> ');
+	writeln('  Welcome to gkhex, simple hex editor. To get help, input `help`.');
+	write(#10 + '  [', HexStr(curr_address, 8), ']', ' -> ');
 	readln(all);
-	while all <> 'exit' do
+	while all <> 'e' do
 	begin
-		command := ''; txt := '';
 		get_command(all, command, txt);
-		execute_command(command, txt, curr_file);
-		write('  -> ');
+		execute_command(command, txt, curr_file, curr_address);
+		write(#10 + '  [', HexStr(curr_address, 8), ']', ' -> ');
 		readln(all);
 	end;
 	close(curr_file);
 end.
+
+{
+writeln('(DEBUG) all:     ', all);
+writeln('(DEBUG) command: ', command);
+writeln('(DEBUG) txt:     ', txt);
+}
