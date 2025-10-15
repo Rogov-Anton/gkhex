@@ -1,12 +1,20 @@
 program gkhex;
+uses crt;
 type
 	bin_file = file of byte;
 
 
 procedure print_help();
 begin
-	writeln('  --- GKHEX editor help ---');
-	writeln('');
+	writeln(#10 + '  --- GKHEX editor help ---' + #10);
+	writeln('  r: overwrite the file with zeros');
+	writeln('  p: print_file');
+	writeln('  a: print file in ascii');
+	writeln('  c: change address in file');
+	writeln('  w: write data in file');
+	writeln('  l: convert string to hex');
+	writeln('  C: clear screen');
+	writeln('  e: exit');
 end;
 
 
@@ -80,35 +88,41 @@ begin
 end;
 
 
-procedure write_data(var f: bin_file; var txt: string);
+procedure write_data(var f: bin_file; var args: string);
 var
+	curr_pos: longword;
 	i: byte = 1;
 	first, second: char;
 begin
+	curr_pos := filepos(f);
 	while i <= 47 do
 	begin
-		first := txt[i];
-		second := txt[i + 1];
-		i := i + 3;
+		first := args[i];
+		second := args[i + 1];
 		write(f, hex_to_dec(first, second));
-		write(hex_to_dec(first, second), ' ');
+		i := i + 3;
+		{ write(hex_to_dec(first, second), ' '); }
 	end;
 	writeln;
+	seek(f, curr_pos);
 end;
 
 
-procedure set_file_size(var f: bin_file; var txt: string);
+procedure rewrite_file(var f: bin_file; var args: string);
 var
 	size, i: longword;              { size of binary file }
 	ok: integer = 0;
 begin
-	val(txt, size, ok);
+	val(args, size, ok);
 	for i := 1 to size * 16 do
 		write(f, 00);
+	seek(f, 0);
 end;
 
 
-procedure print_file(var f: bin_file);
+procedure print_file(var f: bin_file; curr_address: longword);
+{ curr_addr -> variable to print file (not real address)}
+{ curr_address -> real address in file }
 var
 	curr_addr: longword = 0;
 	curr_pos: longword;
@@ -117,53 +131,111 @@ var
 begin
 	curr_pos := filepos(f);
 	seek(f, 0);
-	write(#10 + '  ' + HexStr(curr_addr, 8) + ': ');
+	TextColor(lightgreen);
+	writeln(#10 + '            0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F');
 	while not eof(f) do
 	begin
-		read(f, b);
-		write(HexStr(b, 2), ' ');
-		i := i + 1;
-		if i > 15 then
+		if i = 0 then
 		begin
 			writeln;
-			write('  ' + HexStr(curr_addr, 8) + ': ');
-			curr_addr := curr_addr + 16;
-			i := 0;
+			i := 16;
+			if curr_addr = curr_address then
+			begin
+				TextColor(lightred);
+				write('  ' + HexStr(curr_addr, 8) + ': ');
+				write(#27'[0m');
+			end
+			else
+			begin
+				TextColor(yellow);
+				write('  ' + HexStr(curr_addr, 8) + ': ');
+				write(#27'[0m');
+			end;
 		end;
+		read(f, b);
+		write(HexStr(b, 2), ' ');
+		i := i - 1;
+		curr_addr := curr_addr + 1;
 	end;
-	writeln('-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --');
+	writeln;
 	seek(f, curr_pos);
 end;
 
 
-procedure change_address(var f: bin_file; txt: string; var curr_addr: longword);
+procedure print_ascii(var f: bin_file; curr_address: longword);
+var
+	curr_addr: longword = 0;
+	curr_pos: longword;
+	i: byte = 16;
+	b: byte;
+begin
+	curr_pos := filepos(f);
+	seek(f, 0);
+	while not eof(f) do
+	begin
+		if i = 16 then
+		begin
+			write(#10 + '  ');
+			i := 0;
+		end;
+		read(f, b);
+		if (b >= 32) and (b <= 126) then
+			write(chr(b))
+		else
+			write('-');
+		i := i + 1;
+		curr_addr := curr_addr + 1;
+	end;
+	writeln;
+	seek(f, curr_pos);
+end;
+
+
+procedure change_address(var f: bin_file; args: string; var curr_addr: longword);
 var
 	address: longword;
 	ok: integer;
 begin
-	val(txt, address, ok);
+	val(args, address, ok);
 	seek(f, address * 16);
 	curr_addr := address * 16;
 	writeln(address * 16);
 end;
 
 
-procedure execute_command(var command, txt: string; var f: bin_file;
+procedure string_to_hex(var s: string);
+var
+	i: byte;
+begin
+	write('  ');
+	for i := 1 to length(s) do
+	begin
+		write(HexStr(ord(s[i]), 2), ' ');
+	end;
+	writeln()
+end;
+
+
+procedure execute_command(var command, args: string; var f: bin_file;
 						var curr_addr: longword);
 begin
 	case command of
-		's': set_file_size(f, txt);
-		'p': print_file(f);
-		'c': change_address(f, txt, curr_addr);
-		'w': write_data(f, txt);
-		else writeln('Bad command');
+		'r': rewrite_file(f, args);
+		'p': print_file(f, curr_addr);
+		'a': print_ascii(f, curr_addr);
+		'c': change_address(f, args, curr_addr);
+		'w': write_data(f, args);
+		'l': string_to_hex(args);
+		'C': clrscr;
+		'help': print_help();
+		else writeln('  Bad command');
 	end;
 end;
 
 
 var
 	curr_file: bin_file;
-	all, command, txt: string;
+	all, command, args: string;
 	curr_address: longword = 0;
 begin
 	if ParamCount < 1 then
@@ -172,23 +244,24 @@ begin
 		halt(0);
 	end;
 	assign(curr_file, ParamStr(1));
-	rewrite(curr_file);
+	reset(curr_file);
 	writeln;
+	TextColor(lightgreen);
 	writeln('  Welcome to gkhex, simple hex editor. To get help, input `help`.');
-	write(#10 + '  [', HexStr(curr_address, 8), ']', ' -> ');
+	TextColor(lightblue);
+	write(#10 + '  [', HexStr(curr_address, 8), ']', #27'[0m');
+	write(' -> ');
 	readln(all);
 	while all <> 'e' do
 	begin
-		get_command(all, command, txt);
-		execute_command(command, txt, curr_file, curr_address);
-		write(#10 + '  [', HexStr(curr_address, 8), ']', ' -> ');
+		get_command(all, command, args);
+		if all <> '' then
+			execute_command(command, args, curr_file, curr_address);
+		TextColor(lightblue);
+		write(#10 + '  [', HexStr(curr_address, 8), ']', #27'[0m');
+		write(' -> ');
 		readln(all);
 	end;
 	close(curr_file);
 end.
 
-{
-writeln('(DEBUG) all:     ', all);
-writeln('(DEBUG) command: ', command);
-writeln('(DEBUG) txt:     ', txt);
-}
