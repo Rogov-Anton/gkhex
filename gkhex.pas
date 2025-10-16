@@ -233,6 +233,7 @@ begin
 end;
 
 
+{$I-}
 var
 	curr_file: bin_file;
 	all, command, args: string;
@@ -245,8 +246,12 @@ begin
 	end;
 	assign(curr_file, ParamStr(1));
 	reset(curr_file);
+	if IOresult <> 0 then
+	begin
+		writeln('Error: file does not exist');
+		halt(1);
+	end;
 	writeln;
-	TextColor(lightgreen);
 	writeln('  Welcome to gkhex, simple hex editor. To get help, input `help`.');
 	TextColor(lightblue);
 	write(#10 + '  [', HexStr(curr_address, 8), ']', #27'[0m');
