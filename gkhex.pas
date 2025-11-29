@@ -95,7 +95,7 @@ var
 	first, second: char;
 begin
 	curr_pos := filepos(f);
-	while i <= 47 do
+	while i <= length(args) do
 	begin
 		first := args[i];
 		second := args[i + 1];
